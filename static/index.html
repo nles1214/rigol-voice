@@ -76,6 +76,10 @@
   .btn-live{font-family:var(--font-mono);font-size:10px;padding:3px 10px;border:1px solid var(--border);border-radius:3px;background:transparent;color:var(--text-dim);cursor:pointer;transition:all 0.15s}
   .btn-live:hover{border-color:var(--accent);color:var(--accent)}
   .btn-live.active{border-color:var(--green);color:var(--green);background:rgba(63,185,80,0.08)}
+  .btn-trigger{font-family:var(--font-mono);font-size:10px;padding:3px 10px;border:1px solid var(--border);border-radius:3px;background:transparent;color:var(--text-dim);cursor:pointer;transition:all 0.15s}
+  .btn-trigger:hover{border-color:var(--amber);color:var(--amber)}
+  .btn-trigger.active{border-color:var(--amber);color:var(--amber);background:rgba(210,153,29,0.08);animation:trigger-pulse 0.6s ease-in-out 3}
+  @keyframes trigger-pulse{0%,100%{box-shadow:0 0 0 var(--amber-glow)}50%{box-shadow:0 0 12px rgba(210,153,29,0.5)}}
 
   /* Log panel */
   .log-panel{background:var(--surface);border:1px solid var(--border);border-radius:6px;display:flex;flex-direction:column;overflow:hidden;min-height:200px;max-height:360px}
@@ -232,11 +236,26 @@ function connectWS() {
         $('btnLive').classList.toggle('active', liveViewEnabled);
         $('btnLive').textContent = liveViewEnabled ? 'Live: ON' : 'Live View';
       }
+      if (data.trigger_notify !== undefined) {
+        var ta = data.trigger_notify;
+        $('btnTrigger').classList.toggle('active', ta);
+        $('btnTrigger').textContent = ta ? 'Alert: ON' : 'Alert';
+      }
     } else if (data.type === 'command' || data.type === 'error') {
       addLogEntry(data);
       speakFeedback(data);
     } else if (data.type === 'live_frame' && data.result) {
       $('scopeImageContainer').innerHTML = '<img src="data:image/png;base64,' + data.result + '" alt="Scope" style="max-width:100%;max-height:100%">';
+    } else if (data.type === 'trigger_event') {
+      showToast(data.message || 'Trigger event!');
+      $('btnTrigger').classList.add('active');
+      setTimeout(function(){ $('btnTrigger').classList.remove('active'); }, 2000);
+      // Browser notification
+      if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification('RIGOL Scope Alert', { body: data.message, icon: '/static/favicon.ico' });
+      } else if ('Notification' in window && Notification.permission !== 'denied') {
+        Notification.requestPermission();
+      }
     }
   };
 
@@ -284,6 +303,10 @@ function toggleZoom() {
   var expanded = panel.classList.toggle('expanded');
   inBtn.style.display = expanded ? 'none' : 'flex';
   outBtn.style.display = expanded ? 'flex' : 'none';
+}
+
+function toggleTriggerNotify() {
+  sendWS({ action: 'trigger_toggle' });
 }
 
 function toggleLiveView() {

@@ -27,7 +27,7 @@ SCREENSHOT_DIR.mkdir(exist_ok=True)
 
 scpi = ScpiClient(host=SCOPE_HOST, port=SCOPE_PORT)
 ws_clients = []
-_state = {"live_view": False}
+_state = {"live_view": False, "trigger_notify": False}
 
 async def ws_broadcast(message):
     payload = json.dumps(message, ensure_ascii=False)
@@ -205,6 +205,7 @@ async def handle_connection(reader, writer):
                     "scope_host": f"{SCOPE_HOST}:{SCOPE_PORT}",
                     "commands": get_supported_commands(),
                     "live_view": _state["live_view"],
+                    "trigger_notify": _state["trigger_notify"],
                 }, ensure_ascii=False)
                 await send_http(writer, 200, "application/json", j.encode("utf-8"))
             else:
@@ -229,6 +230,10 @@ async def handle_connection(reader, writer):
                 await ws_broadcast(result)
                 await send_http(writer, 200, "application/json",
                                 json.dumps(result, ensure_ascii=False).encode("utf-8"))
+            elif path == "/api/trigger_toggle":
+                _state["trigger_notify"] = not _state["trigger_notify"]
+                j = json.dumps({"trigger_notify": _state["trigger_notify"]}, ensure_ascii=False)
+                await send_http(writer, 200, "application/json", j.encode("utf-8"))
             elif path == "/api/live_toggle":
                 _state["live_view"] = not _state["live_view"]
                 j = json.dumps({"live_view": _state["live_view"]}, ensure_ascii=False)
@@ -250,6 +255,7 @@ async def handle_ws(reader, writer):
         "connected": scpi.is_connected,
         "commands": get_supported_commands(),
         "live_view": _state["live_view"],
+        "trigger_notify": _state["trigger_notify"],
     }, ensure_ascii=False))
     try:
         while True:
@@ -283,11 +289,17 @@ async def handle_ws(reader, writer):
                     elif a == "command":
                         result = execute_command(msg.get("text", ""))
                         await ws_send_text(writer, json.dumps(result, ensure_ascii=False))
+                    elif a == "trigger_toggle":
+                        _state["trigger_notify"] = not _state["trigger_notify"]
+                        await ws_send_text(writer, json.dumps(
+                            {"type": "status", "connected": scpi.is_connected,
+                             "trigger_notify": _state["trigger_notify"]}, ensure_ascii=False))
                     elif a == "live_toggle":
                         _state["live_view"] = not _state["live_view"]
                         await ws_send_text(writer, json.dumps(
                             {"type": "status", "connected": scpi.is_connected,
-                             "live_view": _state["live_view"]}, ensure_ascii=False))
+                             "live_view": _state["live_view"],
+                             "trigger_notify": _state["trigger_notify"]}, ensure_ascii=False))
                     elif a == "ping":
                         await ws_send_text(writer, '{"type":"pong"}')
                 except Exception as e:
@@ -305,6 +317,24 @@ async def handle_ws(reader, writer):
             pass
         logger.info(f"WS - ({len(ws_clients)})")
 
+async def trigger_monitor_loop():
+    last_state = None
+    while True:
+        await asyncio.sleep(0.8)
+        if not _state["trigger_notify"] or not ws_clients or not scpi.is_connected:
+            last_state = None
+            continue
+        raw = scpi.send(":TRIGger:STATus?")
+        if raw is None:
+            continue
+        raw = raw.strip()
+        if raw != last_state:
+            if raw == "TD":
+                await ws_broadcast({"type": "trigger_event", "state": raw, "message": "Waveform triggered!"})
+            elif last_state == "WAIT" and raw == "STOP":
+                await ws_broadcast({"type": "trigger_event", "state": raw, "message": "Single shot captured!"})
+            last_state = raw
+
 async def live_view_loop():
     while True:
         await asyncio.sleep(2.0)
@@ -321,6 +351,7 @@ async def live_view_loop():
 async def main_async(host, port):
     server = await asyncio.start_server(handle_connection, host, port)
     logger.info(f"Server: http://{host}:{port}  |  Scope: {SCOPE_HOST}:{SCOPE_PORT}")
+    asyncio.create_task(trigger_monitor_loop())
     asyncio.create_task(live_view_loop())
     async with server:
         await server.serve_forever()
