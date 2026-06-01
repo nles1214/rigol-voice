@@ -7,6 +7,10 @@ echo.
 
 cd /d "%~dp0"
 
+echo [*] Cleaning up previous instances...
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":8765" ^| findstr "LISTENING"') do taskkill /f /pid %%a >nul 2>&1
+
+
 set PYTHON=C:\Users\quanquan.shang\AppData\Local\Programs\Python\Python314\python.exe
 
 if not exist "%PYTHON%" (
