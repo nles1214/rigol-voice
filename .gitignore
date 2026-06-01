@@ -2,6 +2,5 @@
 __pycache__/
 *.pyc
 server.log
-screenshots/
 test_*.py
 "@
