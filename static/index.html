@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RIGOL DHO1204 Voice Control</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d1117; --surface: #161b22; --border: #30363d;
+    --text: #c9d1d9; --text-dim: #8b949e;
+    --accent: #58a6ff; --accent-glow: rgba(88,166,255,0.3);
+    --green: #3fb950; --green-glow: rgba(63,185,80,0.3);
+    --red: #f85149; --red-glow: rgba(248,81,73,0.3);
+    --amber: #d2991d;
+    --font-mono: 'JetBrains Mono','Cascadia Code','Consolas',monospace;
+    --font-sans: 'Noto Sans SC','Microsoft YaHei',sans-serif;
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--font-sans);background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;overflow-x:hidden}
+  body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(48,54,61,0.12) 1px,transparent 1px),linear-gradient(90deg,rgba(48,54,61,0.12) 1px,transparent 1px);background-size:32px 32px;pointer-events:none;z-index:0}
+
+  .status-bar{position:relative;z-index:1;display:flex;align-items:center;justify-content:space-between;padding:8px 20px;border-bottom:1px solid var(--border);background:var(--surface);font-family:var(--font-mono);font-size:12px;flex-wrap:wrap;gap:8px}
+  .status-left,.status-right{display:flex;align-items:center;gap:14px}
+  .status-dot{width:8px;height:8px;border-radius:50%;background:var(--red);box-shadow:0 0 6px var(--red-glow);transition:background 0.3s,box-shadow 0.3s}
+  .status-dot.connected{background:var(--green);box-shadow:0 0 6px var(--green-glow)}
+  .status-label{color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;font-size:10px}
+  .status-value{color:var(--text)}
+  .btn-connect{font-family:var(--font-mono);font-size:11px;padding:5px 14px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);cursor:pointer;transition:all 0.2s}
+  .btn-connect:hover{border-color:var(--accent);color:var(--accent)}
+  .btn-connect.connected{border-color:var(--red);color:var(--red)}
+
+  .main{position:relative;z-index:1;flex:1;display:flex;flex-direction:column;align-items:center;padding:24px 20px 32px;gap:16px}
+  .mic-section{display:flex;flex-direction:column;align-items:center;gap:12px}
+  .mic-btn{width:100px;height:100px;border-radius:50%;border:2px solid var(--border);background:var(--surface);color:var(--text-dim);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.25s ease;position:relative}
+  .mic-btn::after{content:'';position:absolute;inset:-4px;border-radius:50%;border:2px solid transparent;transition:all 0.25s ease}
+  .mic-btn:hover{border-color:var(--accent);color:var(--accent);box-shadow:0 0 24px var(--accent-glow)}
+  .mic-btn.listening{border-color:var(--green);color:var(--green);box-shadow:0 0 32px var(--green-glow);animation:mic-pulse 1.5s ease-in-out infinite}
+  .mic-btn.listening::after{border-color:var(--green);animation:mic-ring 1.5s ease-in-out infinite}
+  @keyframes mic-pulse{0%,100%{box-shadow:0 0 24px var(--green-glow)}50%{box-shadow:0 0 48px var(--green-glow)}}
+  @keyframes mic-ring{0%,100%{inset:-4px;opacity:0.6}50%{inset:-12px;opacity:0}}
+  .mic-icon{width:40px;height:40px}
+  .mic-hint{font-family:var(--font-mono);font-size:12px;color:var(--text-dim);text-align:center;min-height:18px;transition:color 0.3s}
+  .mic-hint.listening{color:var(--green)}
+  .mic-hint.error{color:var(--red)}
+
+  .voice-display{width:100%;max-width:520px;min-height:40px;padding:10px 18px;background:var(--surface);border:1px solid var(--border);border-radius:6px;font-family:var(--font-mono);font-size:14px;color:var(--accent);text-align:center;word-break:break-all;transition:border-color 0.3s}
+  .voice-display.active{border-color:var(--accent)}
+  .voice-display:empty::after{content:'Say a command...';color:var(--text-dim);font-style:italic}
+
+  .quick-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+  .quick-btn{font-family:var(--font-mono);font-size:11px;padding:5px 14px;border:1px solid var(--border);border-radius:4px;background:transparent;color:var(--text-dim);cursor:pointer;transition:all 0.15s}
+  .quick-btn:hover{border-color:var(--accent);color:var(--accent)}
+  .quick-btn.danger:hover{border-color:var(--red);color:var(--red)}
+
+  .content-area{width:100%;max-width:960px;display:grid;grid-template-columns:1fr 280px;gap:14px;flex:1;min-height:0}
+
+  /* Scope view panel */
+  .scope-panel{background:var(--surface);border:1px solid var(--border);border-radius:6px;display:flex;flex-direction:column;overflow:hidden;min-height:280px;max-height:360px}
+  .scope-header{font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);padding:8px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+  .scope-view{flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#000;position:relative}
+  .scope-view img{max-width:100%;max-height:100%;object-fit:contain}
+  .scope-view .placeholder{color:var(--text-dim);font-family:var(--font-mono);font-size:13px}
+  .scope-view .placeholder::after{content:'Click "Live View" to show scope display'}
+
+  /* Expanded (fullscreen) scope view */
+  .scope-panel.expanded{position:fixed;inset:0;z-index:50;max-height:none;border-radius:0;border:none}
+  .scope-panel.expanded .scope-header{border-radius:0}
+
+  .scope-zoom{position:absolute;bottom:10px;right:10px;display:flex;gap:6px;opacity:0;transition:opacity 0.2s;z-index:5}
+  .scope-view:hover .scope-zoom,.scope-panel.expanded .scope-zoom{opacity:1}
+  .scope-zoom button{font-family:var(--font-mono);font-size:12px;width:32px;height:32px;border:1px solid rgba(255,255,255,0.2);border-radius:4px;background:rgba(0,0,0,0.6);color:rgba(255,255,255,0.7);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.15s}
+  .scope-zoom button:hover{background:rgba(0,0,0,0.85);color:#fff;border-color:rgba(255,255,255,0.4)}
+  .btn-live{font-family:var(--font-mono);font-size:10px;padding:3px 10px;border:1px solid var(--border);border-radius:3px;background:transparent;color:var(--text-dim);cursor:pointer;transition:all 0.15s}
+  .btn-live:hover{border-color:var(--accent);color:var(--accent)}
+  .btn-live.active{border-color:var(--green);color:var(--green);background:rgba(63,185,80,0.08)}
+
+  /* Log panel */
+  .log-panel{background:var(--surface);border:1px solid var(--border);border-radius:6px;display:flex;flex-direction:column;overflow:hidden;min-height:200px;max-height:360px}
+  .log-header{font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);padding:8px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between}
+  .log-clear{cursor:pointer;color:var(--text-dim);transition:color 0.15s}
+  .log-clear:hover{color:var(--text)}
+  .log-list{flex:1;overflow-y:auto;padding:6px;font-family:var(--font-mono);font-size:11px;display:flex;flex-direction:column;gap:3px}
+  .log-list:empty::after{content:'Waiting for commands...';color:var(--text-dim);padding:16px;text-align:center;font-style:italic}
+  .log-entry{display:flex;gap:8px;padding:5px 8px;border-radius:4px;animation:log-in 0.3s ease;align-items:flex-start}
+  .log-entry.success{background:rgba(63,185,80,0.05)}
+  .log-entry.error{background:rgba(248,81,73,0.05)}
+  .log-entry.query{background:rgba(88,166,255,0.05)}
+  @keyframes log-in{from{opacity:0;transform:translateY(-6px)}}
+  .log-time{color:var(--text-dim);flex-shrink:0;font-size:10px}
+  .log-body{flex:1;min-width:0}
+  .log-voice{color:var(--text);word-break:break-all}
+  .log-desc{color:var(--accent);font-size:10px}
+  .log-result{color:var(--green);font-size:10px;margin-top:1px}
+  .log-error{color:var(--red);font-size:10px}
+  .log-path{color:var(--text-dim);font-size:10px;margin-top:2px;word-break:break-all}
+
+  /* Help panel */
+  .help-panel{background:var(--surface);border:1px solid var(--border);border-radius:6px;display:flex;flex-direction:column;overflow:hidden;max-height:360px}
+  .help-header{font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);padding:8px 14px;border-bottom:1px solid var(--border)}
+  .help-list{flex:1;overflow-y:auto;padding:10px 14px;display:flex;flex-direction:column;gap:6px}
+  .help-item{font-family:var(--font-mono);font-size:10px;color:var(--text-dim);padding:4px 8px;border-radius:3px;background:rgba(88,166,255,0.03);border-left:2px solid var(--border);cursor:pointer;transition:all 0.15s}
+  .help-item:hover{color:var(--accent);border-left-color:var(--accent);background:rgba(88,166,255,0.08)}
+
+  /* Toast */
+  .toast{position:fixed;top:60px;right:20px;z-index:200;background:var(--surface);border:1px solid var(--green);border-radius:6px;padding:12px 20px;font-family:var(--font-mono);font-size:12px;color:var(--text);box-shadow:0 4px 16px rgba(0,0,0,0.4);animation:toast-in 0.3s ease;max-width:380px}
+  .toast.hidden{display:none}
+  @keyframes toast-in{from{opacity:0;transform:translateY(-10px)}}
+
+  @media(max-width:768px){
+    .content-area{grid-template-columns:1fr}
+    .mic-btn{width:80px;height:80px}
+    .mic-icon{width:32px;height:32px}
+  }
+</style>
+</head>
+<body>
+
+<header class="status-bar">
+  <div class="status-left">
+    <div class="status-dot" id="statusDot"></div>
+    <span class="status-label">Scope</span>
+    <span class="status-value" id="scopeAddr">192.168.152.177:5555</span>
+  </div>
+  <div class="status-right">
+    <span class="status-label">WS</span>
+    <span class="status-value" id="wsStatus">--</span>
+    <button class="btn-connect" id="btnConnect" onclick="toggleConnection()">Connect Scope</button>
+  </div>
+</header>
+
+<main class="main">
+
+  <!-- Mic -->
+  <div class="mic-section">
+    <button class="mic-btn" id="micBtn" onclick="toggleMic()" title="Click to start voice control">
+      <svg class="mic-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="16" y="2" width="16" height="28" rx="8"/>
+        <path d="M12 20c0 6.63 5.37 12 12 12s12-5.37 12-12"/>
+        <line x1="24" y1="42" x2="24" y2="48"/>
+        <line x1="16" y1="48" x2="32" y2="48"/>
+      </svg>
+    </button>
+    <div class="mic-hint" id="micHint">Click the button to start speaking</div>
+  </div>
+
+  <!-- Voice text -->
+  <div class="voice-display" id="voiceDisplay"></div>
+
+  <!-- Quick actions -->
+  <div class="quick-actions">
+    <button class="quick-btn" onclick="sendText('Run')">&#9654; Run</button>
+    <button class="quick-btn danger" onclick="sendText('Stop')">&#9632; Stop</button>
+    <button class="quick-btn" onclick="sendText('Auto')">&#9733; Auto</button>
+    <button class="quick-btn" onclick="sendText('Single')">&#9654;| Single</button>
+    <button class="quick-btn" onclick="sendText('Clear')">&#10005; Clear</button>
+    <button class="quick-btn" onclick="sendText('Screenshot')">&#128247; Shot</button>
+  </div>
+
+  <!-- Content -->
+  <div class="content-area">
+
+    <!-- Left column: scope view + log -->
+    <div style="display:flex;flex-direction:column;gap:14px;min-height:0">
+      <!-- Scope view -->
+      <div class="scope-panel">
+        <div class="scope-header">
+          <span>Scope Display</span>
+          <button class="btn-live" id="btnLive" onclick="toggleLiveView()">Live View</button>
+        </div>
+        <div class="scope-view" id="scopeView">
+            <div id="scopeImageContainer" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center">
+              <span class="placeholder"></span>
+            </div>
+            <div class="scope-zoom" id="scopeZoom">
+              <button onclick="toggleZoom()" title="Fullscreen" id="btnZoomIn">+</button>
+              <button onclick="toggleZoom()" title="Restore" id="btnZoomOut" style="display:none">-</button>
+            </div>
+          </div>
+      </div>
+
+      <!-- Log -->
+      <div class="log-panel">
+        <div class="log-header">
+          <span>Command Log</span>
+          <span class="log-clear" onclick="clearLog()">Clear</span>
+        </div>
+        <div class="log-list" id="logList"></div>
+      </div>
+    </div>
+
+    <!-- Right column: help -->
+    <div class="help-panel">
+      <div class="help-header">Voice Commands</div>
+      <div class="help-list" id="helpList"></div>
+    </div>
+  </div>
+</main>
+
+<!-- Toast -->
+<div class="toast hidden" id="toast"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+let ws = null;
+let recognition = null;
+let isListening = false;
+let isConnected = false;
+let liveViewEnabled = false;
+let reconnectTimer = null;
+
+function connectWS() {
+  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  $('wsStatus').textContent = '...';
+  ws = new WebSocket(protocol + '//' + location.host + '/ws');
+
+  ws.onopen = () => {
+    $('wsStatus').textContent = 'OK';
+    $('wsStatus').style.color = 'var(--green)';
+  };
+
+  ws.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    if (data.type === 'status') {
+      updateConnectionStatus(data.connected, data.error);
+      if (data.commands) populateHelp(data.commands);
+      if (data.live_view !== undefined) {
+        liveViewEnabled = data.live_view;
+        $('btnLive').classList.toggle('active', liveViewEnabled);
+        $('btnLive').textContent = liveViewEnabled ? 'Live: ON' : 'Live View';
+      }
+    } else if (data.type === 'command' || data.type === 'error') {
+      addLogEntry(data);
+      speakFeedback(data);
+    } else if (data.type === 'live_frame' && data.result) {
+      $('scopeImageContainer').innerHTML = '<img src="data:image/png;base64,' + data.result + '" alt="Scope" style="max-width:100%;max-height:100%">';
+    }
+  };
+
+  ws.onclose = () => {
+    $('wsStatus').textContent = 'CLOSED';
+    $('wsStatus').style.color = 'var(--red)';
+    ws = null;
+    reconnectTimer = setTimeout(connectWS, 3000);
+  };
+
+  ws.onerror = () => {
+    $('wsStatus').textContent = 'ERR';
+    $('wsStatus').style.color = 'var(--red)';
+  };
+}
+
+function updateConnectionStatus(connected, errMsg) {
+  isConnected = connected;
+  $('statusDot').classList.toggle('connected', connected);
+  if (connected) {
+    $('btnConnect').textContent = 'Disconnect';
+    $('btnConnect').classList.add('connected');
+  } else {
+    $('btnConnect').textContent = 'Connect Scope';
+    $('btnConnect').classList.remove('connected');
+    if (errMsg) {
+      showToast('Connection failed: ' + errMsg);
+    }
+  }
+}
+
+function toggleConnection() {
+  if (isConnected) {
+    sendWS({ action: 'disconnect' });
+    showToast('Disconnected from scope');
+  } else {
+    sendWS({ action: 'connect' });
+  }
+}
+
+function toggleZoom() {
+  var panel = document.querySelector('.scope-panel');
+  var inBtn = document.getElementById('btnZoomIn');
+  var outBtn = document.getElementById('btnZoomOut');
+  var expanded = panel.classList.toggle('expanded');
+  inBtn.style.display = expanded ? 'none' : 'flex';
+  outBtn.style.display = expanded ? 'flex' : 'none';
+}
+
+function toggleLiveView() {
+  sendWS({ action: 'live_toggle' });
+}
+
+function sendWS(msg) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(msg));
+  }
+}
+
+// ── Voice ──
+
+function initRecognition() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    $('micHint').textContent = 'Speech recognition not supported (use Chrome/Edge)';
+    $('micHint').classList.add('error');
+    $('micBtn').disabled = true;
+    return;
+  }
+  recognition = new SR();
+  recognition.lang = 'zh-CN';
+  recognition.continuous = true;
+  recognition.interimResults = true;
+  recognition.maxAlternatives = 1;
+
+  recognition.onresult = (event) => {
+    let interim = '';
+    let finalText = '';
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const t = event.results[i][0].transcript;
+      if (event.results[i].isFinal) finalText += t; else interim += t;
+    }
+    const display = finalText + interim;
+    $('voiceDisplay').textContent = display;
+    if (display) $('voiceDisplay').classList.add('active');
+    if (finalText) sendText(finalText);
+  };
+
+  recognition.onerror = (event) => {
+    if (event.error === 'no-speech' || event.error === 'aborted') return;
+    $('micHint').textContent = 'Error: ' + event.error;
+    $('micHint').classList.add('error');
+    stopListening();
+  };
+
+  recognition.onend = () => {
+    if (isListening) { try { recognition.start(); } catch(e){} }
+    else { stopListening(); }
+  };
+}
+
+function toggleMic() {
+  if (!recognition) initRecognition();
+  if (isListening) { stopListening(); } else { startListening(); }
+}
+
+function startListening() {
+  if (!recognition) return;
+  try {
+    recognition.start();
+    isListening = true;
+    $('micBtn').classList.add('listening');
+    $('micHint').textContent = 'Listening...';
+    $('micHint').classList.add('listening');
+    $('micHint').classList.remove('error');
+    $('voiceDisplay').textContent = '';
+    $('voiceDisplay').classList.remove('active');
+  } catch(e) {}
+}
+
+function stopListening() {
+  isListening = false;
+  if (recognition) { try { recognition.stop(); } catch(e){} }
+  $('micBtn').classList.remove('listening');
+  $('micHint').textContent = 'Click the button to start speaking';
+  $('micHint').classList.remove('listening', 'error');
+  $('voiceDisplay').classList.remove('active');
+}
+
+function sendText(text) {
+  text = text.trim();
+  if (!text) return;
+  sendWS({ action: 'command', text });
+}
+
+// ── Log ──
+
+function addLogEntry(data) {
+  const entry = document.createElement('div');
+  const time = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+  const isError = data.type === 'error';
+  const isQuery = data.result_type === 'text' && data.result;
+
+  entry.className = 'log-entry ' + (isError ? 'error' : isQuery ? 'query' : 'success');
+
+  let h = '<span class="log-time">' + time + '</span><div class="log-body">';
+  h += '<div class="log-voice">' + escHtml(data.voice_text || '') + '</div>';
+  if (data.description) h += '<div class="log-desc">' + escHtml(data.description) + '</div>';
+  if (data.command) h += '<div class="log-desc" style="color:var(--text-dim)">SCPI: ' + escHtml(data.command) + '</div>';
+  if (isError) {
+    h += '<div class="log-error">' + escHtml(data.message) + '</div>';
+  } else if (data.result_type === 'text' && data.result) {
+    h += '<div class="log-result">' + escHtml(data.result) + '</div>';
+  } else if (data.result_type === 'image' && data.result) {
+    h += '<img src="data:image/png;base64,' + data.result + '" style="max-width:200px;border-radius:3px;border:1px solid var(--border);margin-top:4px;cursor:pointer" onclick="this.style.maxWidth=this.style.maxWidth===\'100%\'?\'200px\':\'100%\'" alt="Screenshot">';
+    if (data.file_path) {
+      h += '<div class="log-path">Saved: ' + escHtml(data.file_path) + '</div>';
+    }
+  } else if (data.result === 'ok') {
+    h += '<div class="log-result">OK</div>';
+  }
+  h += '</div>';
+  entry.innerHTML = h;
+  $('logList').appendChild(entry);
+  $('logList').scrollTop = $('logList').scrollHeight;
+}
+
+function clearLog() { $('logList').innerHTML = ''; }
+
+// ── TTS ──
+
+function speakFeedback(data) {
+  if (!('speechSynthesis' in window)) return;
+  window.speechSynthesis.cancel();
+  let text = '';
+  if (data.type === 'error') {
+    text = data.message;
+  } else if (data.result_type === 'text' && data.result) {
+    text = data.description + ': ' + data.result;
+  } else {
+    text = data.description || 'Done';
+  }
+  if (!text) return;
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.lang = 'zh-CN';
+  utter.rate = 0.95;
+  utter.volume = 0.8;
+  const voices = window.speechSynthesis.getVoices();
+  const zh = voices.find(function(v){return v.lang.startsWith('zh')});
+  if (zh) utter.voice = zh;
+  window.speechSynthesis.speak(utter);
+}
+
+// ── Help ──
+
+function populateHelp(commands) {
+  if (!commands || commands.length === 0) return;
+  $('helpList').innerHTML = commands.map(function(c){
+    return '<div class="help-item" onclick="sendText(\'' + escAttr(c) + '\')">' + escHtml(c) + '</div>';
+  }).join('');
+}
+
+// ── Toast ──
+
+function showToast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.remove('hidden');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(function(){ t.classList.add('hidden'); }, 3000);
+}
+
+// ── Utils ──
+
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escAttr(s) { return String(s).replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
+
+// ── Init ──
+
+connectWS();
+initRecognition();
+</script>
+</body>
+</html>
