@@ -1,5 +1,10 @@
 # RIGOL DHO1204 Voice Control
 
+[English](./README.md) | [中文](./README_zh.md)
+
+---
+
+
 Browser-based voice control for the RIGOL DHO1204 oscilloscope via SCPI over TCP/IP. Speak commands in Chinese or English — the oscilloscope responds in real time.
 
 ## Features

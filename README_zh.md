@@ -1,5 +1,10 @@
 # RIGOL DHO1204 语音控制系统
 
+[English](./README.md) | [中文](./README_zh.md)
+
+---
+
+
 基于浏览器的 RIGOL DHO1204 示波器语音控制工具，通过 SCPI over TCP/IP 协议与示波器通信。用中文或英文说出指令，示波器实时响应。
 
 ## 功能特性
