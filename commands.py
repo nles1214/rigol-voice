@@ -328,7 +328,7 @@ class CommandParser:
     @classmethod
     def _pat_60_screenshot(cls, text: str) -> ParsedCommand | None:
         if re.search(r"(截图|截屏|保存屏幕|保存画面|抓图|抓屏|screenshot|capture|shot|snap|拍照|截取)", text):
-            return ParsedCommand(":DISPlay:DATA? BMP,SCR", True, "截取屏幕画面")
+            return ParsedCommand(":DISPlay:DATA?", True, "截取屏幕画面")
         return None
 
     # ── Acquisition ───────────────────────────────────────────────────
