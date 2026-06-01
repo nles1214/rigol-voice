@@ -146,6 +146,8 @@ async def send_http(writer, status, ct, body):
     reason = HTTPStatus(status).phrase
     resp = (f"HTTP/1.1 {status} {reason}\r\nContent-Type: {ct}\r\n"
             f"Content-Length: {len(body)}\r\nConnection: close\r\n"
+            "Cache-Control: no-cache, no-store, must-revalidate\r\n"
+            "Pragma: no-cache\r\n"
             "Access-Control-Allow-Origin: *\r\n\r\n").encode() + body
     writer.write(resp)
     await writer.drain()
