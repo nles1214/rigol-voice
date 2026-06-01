@@ -245,7 +245,6 @@ function connectWS() {
       }
     } else if (data.type === 'command' || data.type === 'error') {
       addLogEntry(data);
-      speakFeedback(data);
     } else if (data.type === 'live_frame' && data.result) {
       $('scopeImageContainer').innerHTML = '<img src="data:image/png;base64,' + data.result + '" alt="Scope" style="max-width:100%;max-height:100%">';
     } else if (data.type === 'trigger_event') {
@@ -447,31 +446,6 @@ function playDing() {
     osc.connect(gain); gain.connect(ctx.destination);
     osc.start(); osc.stop(ctx.currentTime + 0.3);
   } catch(e) {}
-}
-
-function speakFeedback(data) {
-  if (!('speechSynthesis' in window)) return;
-  window.speechSynthesis.cancel();
-  let text = '';
-  if (data.type === 'error') {
-    text = data.message;
-  } else if (data.result_type === 'image' && data.file_name) {
-    playDing();
-    return;
-  } else if (data.result_type === 'text' && data.result) {
-    text = data.description + ': ' + data.result;
-  } else {
-    text = data.description || 'Done';
-  }
-  if (!text) return;
-  const utter = new SpeechSynthesisUtterance(text);
-  utter.lang = 'zh-CN';
-  utter.rate = 0.95;
-  utter.volume = 0.8;
-  const voices = window.speechSynthesis.getVoices();
-  const zh = voices.find(function(v){return v.lang.startsWith('zh')});
-  if (zh) utter.voice = zh;
-  window.speechSynthesis.speak(utter);
 }
 
 // ── Help ──
