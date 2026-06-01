@@ -419,7 +419,8 @@ function addLogEntry(data) {
     h += '<img src="data:image/png;base64,' + data.result + '" style="max-width:200px;border-radius:3px;border:1px solid var(--border);margin-top:4px;cursor:pointer" onclick="this.style.maxWidth=this.style.maxWidth===\'100%\'?\'200px\':\'100%\'" alt="Screenshot">';
     if (data.file_path) {
       h += '<div class="log-path">Saved: ' + escHtml(data.file_path) + '</div>';
-    }
+        showToast('Screenshot saved: ' + data.file_name);
+      }
   } else if (data.result === 'ok') {
     h += '<div class="log-result">OK</div>';
   }
@@ -439,6 +440,8 @@ function speakFeedback(data) {
   let text = '';
   if (data.type === 'error') {
     text = data.message;
+  } else if (data.result_type === 'image' && data.file_name) {
+    text = data.description + ', saved as ' + data.file_name;
   } else if (data.result_type === 'text' && data.result) {
     text = data.description + ': ' + data.result;
   } else {
