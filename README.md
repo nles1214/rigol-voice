@@ -9,6 +9,9 @@ Browser-based voice control for the RIGOL DHO1204 oscilloscope via SCPI over TCP
 
 ## Features
 
+- **Auto-Capture Mode** — Single trigger loop: detect waveform, auto-screenshot, 30s cooldown, re-arm. Hands-free batch capture.
+- **Voice Recognition**
+
 - **Voice Recognition** — Chrome/Edge Web Speech API, continuous listening with interim results display
 - **Live Scope View** — Real-time display panel with fullscreen zoom
 - **Trigger Alert** — Desktop notification when the oscilloscope captures a waveform
@@ -76,6 +79,7 @@ python server.py --host 0.0.0.0 --port 8765 --scope-host 192.168.152.177 --scope
 
 | Tag | Highlights |
 |-----|------------|
+| **v0.3.1** | Auto-capture mode: single trigger loop + auto screenshot + 30s cooldown with countdown UI |
 | **v0.3** | Screenshot save + ding notification, trigger alert with desktop notifications, live view zoom, v0.2 cache badge |
 | **v0.1** | Voice control, SCPI communication, WebSocket server, live scope view, screenshot capture |
 
