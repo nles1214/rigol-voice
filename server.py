@@ -27,7 +27,7 @@ SCREENSHOT_DIR.mkdir(exist_ok=True)
 
 scpi = ScpiClient(host=SCOPE_HOST, port=SCOPE_PORT)
 ws_clients = []
-_state = {"live_view": False, "trigger_notify": False}
+_state = {"live_view": False, "trigger_notify": False, "auto_capture": False, "capture_count": 0}
 
 async def ws_broadcast(message):
     payload = json.dumps(message, ensure_ascii=False)
@@ -207,7 +207,7 @@ async def handle_connection(reader, writer):
                     "scope_host": f"{SCOPE_HOST}:{SCOPE_PORT}",
                     "commands": get_supported_commands(),
                     "live_view": _state["live_view"],
-                    "trigger_notify": _state["trigger_notify"],
+                    "trigger_notify": _state["trigger_notify"], "auto_capture": _state["auto_capture"], "capture_count": _state["capture_count"],
                 }, ensure_ascii=False)
                 await send_http(writer, 200, "application/json", j.encode("utf-8"))
             else:
@@ -236,6 +236,12 @@ async def handle_connection(reader, writer):
                 _state["trigger_notify"] = not _state["trigger_notify"]
                 j = json.dumps({"trigger_notify": _state["trigger_notify"]}, ensure_ascii=False)
                 await send_http(writer, 200, "application/json", j.encode("utf-8"))
+            elif path == "/api/auto_capture_toggle":
+                _state["auto_capture"] = not _state["auto_capture"]
+                if _state["auto_capture"]:
+                    _state["capture_count"] = 0
+                j = json.dumps({"auto_capture": _state["auto_capture"]}, ensure_ascii=False)
+                await send_http(writer, 200, "application/json", j.encode("utf-8"))
             elif path == "/api/live_toggle":
                 _state["live_view"] = not _state["live_view"]
                 j = json.dumps({"live_view": _state["live_view"]}, ensure_ascii=False)
@@ -257,7 +263,7 @@ async def handle_ws(reader, writer):
         "connected": scpi.is_connected,
         "commands": get_supported_commands(),
         "live_view": _state["live_view"],
-        "trigger_notify": _state["trigger_notify"],
+        "trigger_notify": _state["trigger_notify"], "auto_capture": _state["auto_capture"], "capture_count": _state["capture_count"], "auto_capture": _state["auto_capture"], "capture_count": _state["capture_count"],
     }, ensure_ascii=False))
     try:
         while True:
@@ -296,12 +302,20 @@ async def handle_ws(reader, writer):
                         await ws_send_text(writer, json.dumps(
                             {"type": "status", "connected": scpi.is_connected,
                              "trigger_notify": _state["trigger_notify"]}, ensure_ascii=False))
+                    elif a == "auto_capture_toggle":
+                        _state["auto_capture"] = not _state["auto_capture"]
+                        if _state["auto_capture"]:
+                            _state["capture_count"] = 0
+                        await ws_send_text(writer, json.dumps(
+                            {"type": "status", "connected": scpi.is_connected,
+                             "auto_capture": _state["auto_capture"], "capture_count": _state["capture_count"]},
+                            ensure_ascii=False))
                     elif a == "live_toggle":
                         _state["live_view"] = not _state["live_view"]
                         await ws_send_text(writer, json.dumps(
                             {"type": "status", "connected": scpi.is_connected,
-                             "live_view": _state["live_view"],
-                             "trigger_notify": _state["trigger_notify"]}, ensure_ascii=False))
+                             "live_view": _state["live_view"], "trigger_notify": _state["trigger_notify"],
+                             "auto_capture": _state["auto_capture"], "capture_count": _state["capture_count"]}, ensure_ascii=False))
                     elif a == "ping":
                         await ws_send_text(writer, '{"type":"pong"}')
                 except Exception as e:
@@ -337,6 +351,45 @@ async def trigger_monitor_loop():
                 await ws_broadcast({"type": "trigger_event", "state": raw, "message": "Single shot captured!"})
             last_state = raw
 
+async def auto_capture_loop():
+    while True:
+        await asyncio.sleep(0.5)
+        if not _state["auto_capture"] or not scpi.is_connected:
+            await asyncio.sleep(1.0)
+            continue
+        # Arm single trigger
+        scpi.send(":SINGle")
+        await asyncio.sleep(0.3)
+        # Wait for trigger to fire and acquisition to complete
+        while _state["auto_capture"] and scpi.is_connected:
+            raw = scpi.send(":TRIGger:STATus?")
+            if raw is None:
+                break
+            raw = raw.strip()
+            if raw == "STOP":
+                # Triggered and acquisition done - take screenshot
+                img_raw = scpi.send(":DISPlay:DATA?")
+                if img_raw:
+                    img_bytes = _extract_binary(img_raw)
+                    if img_bytes:
+                        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+                        fname = f"scope_{ts}.png"
+                        fpath = SCREENSHOT_DIR / fname
+                        fpath.write_bytes(img_bytes)
+                        b64 = base64.b64encode(img_bytes).decode()
+                        _state["capture_count"] += 1
+                        logger.info(f"Auto-capture #{_state['capture_count']}: {fpath}")
+                        await ws_broadcast({
+                            "type": "auto_capture",
+                            "result": b64,
+                            "result_type": "image",
+                            "file_path": str(fpath),
+                            "file_name": fname,
+                            "count": _state["capture_count"],
+                        })
+                break  # Re-arm
+            await asyncio.sleep(0.3)
+
 async def live_view_loop():
     while True:
         await asyncio.sleep(2.0)
@@ -354,6 +407,7 @@ async def main_async(host, port):
     server = await asyncio.start_server(handle_connection, host, port)
     logger.info(f"Server: http://{host}:{port}  |  Scope: {SCOPE_HOST}:{SCOPE_PORT}")
     asyncio.create_task(trigger_monitor_loop())
+    asyncio.create_task(auto_capture_loop())
     asyncio.create_task(live_view_loop())
     async with server:
         await server.serve_forever()

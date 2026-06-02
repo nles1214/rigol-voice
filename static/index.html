@@ -80,6 +80,12 @@
   .btn-trigger:hover{border-color:var(--amber);color:var(--amber)}
   .btn-trigger.active{border-color:var(--amber);color:var(--amber);background:rgba(210,153,29,0.08);animation:trigger-pulse 0.6s ease-in-out 3}
   @keyframes trigger-pulse{0%,100%{box-shadow:0 0 0 var(--amber-glow)}50%{box-shadow:0 0 12px rgba(210,153,29,0.5)}}
+  .btn-capture{font-family:var(--font-mono);font-size:10px;padding:3px 10px;border:1px solid var(--border);border-radius:3px;background:transparent;color:var(--text-dim);cursor:pointer;transition:all 0.15s;position:relative}
+  .btn-capture:hover{border-color:var(--green);color:var(--green)}
+  .btn-capture.active{border-color:var(--green);color:var(--green);background:rgba(63,185,80,0.08)}
+  .capture-count{display:none;font-size:9px;background:var(--green);color:#000;border-radius:8px;padding:0 5px;margin-left:4px;font-weight:600}
+  .btn-capture.active .capture-count{display:inline}
+  @keyframes trigger-pulse{0%,100%{box-shadow:0 0 0 var(--amber-glow)}50%{box-shadow:0 0 12px rgba(210,153,29,0.5)}}
 
   /* Log panel */
   .log-panel{background:var(--surface);border:1px solid var(--border);border-radius:6px;display:flex;flex-direction:column;overflow:hidden;min-height:200px;max-height:360px}
@@ -173,7 +179,8 @@
       <div class="scope-panel">
         <div class="scope-header">
           <span>Scope Display</span>
-          <button class="btn-live" id="btnLive" onclick="toggleLiveView()">Live View</button>
+          <button class="btn-capture" id="btnCapture" onclick="toggleAutoCapture()">Capture<span class="capture-count" id="captureCount">0</span></button>
+            <button class="btn-live" id="btnLive" onclick="toggleLiveView()">Live View</button>
             <button class="btn-trigger" id="btnTrigger" onclick="toggleTriggerNotify()">Alert</button>
           </div>
         <div class="scope-view" id="scopeView">
@@ -243,6 +250,11 @@ function connectWS() {
         $('btnTrigger').classList.toggle('active', ta);
         $('btnTrigger').textContent = ta ? 'Alert: ON' : 'Alert';
       }
+      if (data.auto_capture !== undefined) {
+        var ac = data.auto_capture;
+        $('btnCapture').classList.toggle('active', ac);
+        $('captureCount').textContent = data.capture_count || 0;
+      }
     } else if (data.type === 'command' || data.type === 'error') {
       addLogEntry(data);
     } else if (data.type === 'live_frame' && data.result) {
@@ -304,6 +316,10 @@ function toggleZoom() {
   var expanded = panel.classList.toggle('expanded');
   inBtn.style.display = expanded ? 'none' : 'flex';
   outBtn.style.display = expanded ? 'flex' : 'none';
+}
+
+function toggleAutoCapture() {
+  sendWS({ action: 'auto_capture_toggle' });
 }
 
 function toggleTriggerNotify() {
