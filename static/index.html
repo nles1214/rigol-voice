@@ -269,6 +269,11 @@ function connectWS() {
       } else if ('Notification' in window && Notification.permission !== 'denied') {
         Notification.requestPermission();
       }
+    } else if (data.type === 'auto_capture') {
+      $('scopeImageContainer').innerHTML = '<img src="data:image/png;base64,' + data.result + '" alt="Scope" style="max-width:100%;max-height:100%">';
+      $('captureCount').textContent = data.count || 0;
+      showToast('Auto-capture #' + (data.count || 0) + ': ' + (data.file_name || ''));
+      playDing();
     }
   };
 
