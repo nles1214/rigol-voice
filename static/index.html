@@ -274,6 +274,18 @@ function connectWS() {
       $('captureCount').textContent = data.count || 0;
       showToast('Auto-capture #' + (data.count || 0) + ': ' + (data.file_name || ''));
       playDing();
+      // Show 30s cooldown
+      var cd = 30;
+      $('btnCapture').textContent = 'Cooling ' + cd + 's';
+      var timer = setInterval(function() {
+        cd--;
+        if (cd <= 0 || !$('btnCapture').classList.contains('active')) {
+          clearInterval(timer);
+          if ($('btnCapture').classList.contains('active')) $('btnCapture').innerHTML = 'Capture<span class="capture-count" id="captureCount">' + (data.count || 0) + '</span>';
+        } else {
+          $('btnCapture').textContent = 'Cooling ' + cd + 's';
+        }
+      }, 1000);
     }
   };
 

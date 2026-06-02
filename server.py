@@ -387,8 +387,15 @@ async def auto_capture_loop():
                             "file_name": fname,
                             "count": _state["capture_count"],
                         })
-                break  # Re-arm
+                break  # Screenshot done, wait before re-arming
             await asyncio.sleep(0.3)
+
+        # 30-second cooldown before next single trigger
+        if _state["auto_capture"] and scpi.is_connected:
+            for _ in range(60):  # 60 x 0.5s = 30s
+                if not _state["auto_capture"] or not scpi.is_connected:
+                    break
+                await asyncio.sleep(0.5)
 
 async def live_view_loop():
     while True:
